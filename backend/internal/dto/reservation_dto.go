@@ -10,6 +10,13 @@ type CreateReservationReq struct {
 	Remark    string    `json:"remark" binding:"omitempty,max=255"`
 }
 
+// RescheduleReservationReq 改约请求：换到新的机位与时段，预约编号保留。
+type RescheduleReservationReq struct {
+	StationID uint      `json:"station_id" binding:"required"`
+	StartTime time.Time `json:"start_time" binding:"required"`
+	EndTime   time.Time `json:"end_time" binding:"required"`
+}
+
 // ReservationQuery 预约查询参数。
 type ReservationQuery struct {
 	Page     int    `form:"page" binding:"omitempty,min=1"`

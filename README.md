@@ -28,7 +28,7 @@ docker compose up -d --build
 
 1. **机位/包厢实时状态看板**：网格/列表展示机位实时状态（空闲/使用中/故障/预约），按区域筛选，支持 WebSocket 实时推送（`/api/v1/ws/stations`）。
 2. **会员充值与时长包**：会员充值余额、购买 10 小时/30 小时/月卡，消费时优先扣除时长包余额，不足时扣余额。
-3. **机位预约与续费**：会员预约指定机位与时段，到店扫码开机，上机过程可续费延长时长。
+3. **机位预约与续费**：会员预约指定机位与时段，开始前两小时可本人改约到无冲突的机位/时段（编号保留，冲突则原预约照旧有效），到店扫码开机，上机过程可续费延长时长。
 4. **上机时长排行榜**：按日/周/月统计会员累计上机时长，支持按游戏类型（LOL/CSGO/王者荣耀）筛选。
 5. **赛事报名与战队管理**：门店发布电竞赛事，玩家个人/战队报名，系统自动抽签分组，记录比赛结果与战绩。
 
@@ -156,6 +156,7 @@ docker compose up -d --build
 | POST | /reservations | 创建预约 | 登录 |
 | POST | /reservations/:id/confirm | 确认预约 | admin/staff |
 | POST | /reservations/:id/cancel | 取消预约 | 登录 |
+| POST | /reservations/:id/reschedule | 本人改约（开始前两小时换无冲突机位/时段，编号保留） | 登录 |
 | POST | /reservations/:id/checkin | 到店开机 | admin/staff |
 
 ### 上机记录
@@ -213,6 +214,11 @@ curl -sS http://localhost:29506/api/v1/stations?page=1\&page_size=5 -H "Authoriz
 curl -sS -X POST http://localhost:29506/api/v1/reservations \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"station_id":1,"start_time":"2026-08-17T10:00:00+08:00","end_time":"2026-08-17T12:00:00+08:00"}'
+
+# 4b. 改约（本人，开始前两小时；编号保留，失败则原预约照旧有效）
+curl -sS -X POST http://localhost:29506/api/v1/reservations/1/reschedule \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"station_id":2,"start_time":"2026-08-17T14:00:00+08:00","end_time":"2026-08-17T16:00:00+08:00"}'
 
 # 5. 购买时长包
 curl -sS -X POST http://localhost:29506/api/v1/recharges/packages \
