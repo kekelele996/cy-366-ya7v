@@ -28,7 +28,7 @@ docker compose up -d --build
 
 1. **机位/包厢实时状态看板**：网格/列表展示机位实时状态（空闲/使用中/故障/预约），按区域筛选，支持 WebSocket 实时推送（`/api/v1/ws/stations`）。
 2. **会员充值与时长包**：会员充值余额、购买 10 小时/30 小时/月卡，消费时优先扣除时长包余额，不足时扣余额。
-3. **机位预约与续费**：会员预约指定机位与时段，到店扫码开机，上机过程可续费延长时长。
+3. **机位预约与续费**：会员预约指定机位与时段，到店扫码开机，上机过程可续费延长时长；待确认/已确认的预约可在开始前两小时改约到其他无冲突的机位与时段，预约编号保留。
 4. **上机时长排行榜**：按日/周/月统计会员累计上机时长，支持按游戏类型（LOL/CSGO/王者荣耀）筛选。
 5. **赛事报名与战队管理**：门店发布电竞赛事，玩家个人/战队报名，系统自动抽签分组，记录比赛结果与战绩。
 
@@ -156,6 +156,7 @@ docker compose up -d --build
 | POST | /reservations | 创建预约 | 登录 |
 | POST | /reservations/:id/confirm | 确认预约 | admin/staff |
 | POST | /reservations/:id/cancel | 取消预约 | 登录 |
+| POST | /reservations/:id/reschedule | 改约（开始前2小时可换机位/时段，编号保留） | 登录（本人或 admin/staff） |
 | POST | /reservations/:id/checkin | 到店开机 | admin/staff |
 
 ### 上机记录
@@ -221,6 +222,11 @@ curl -sS -X POST http://localhost:29506/api/v1/recharges/packages \
 
 # 6. 上机时长排行榜
 curl -sS "http://localhost:29506/api/v1/sessions/rank?period=week&limit=10" -H "Authorization: Bearer $TOKEN"
+
+# 7. 改约（更换机位与时段，预约编号保留；新时段冲突时原预约照旧可用）
+curl -sS -X POST http://localhost:29506/api/v1/reservations/1/reschedule \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"station_id":2,"start_time":"2026-08-18T14:00:00+08:00","end_time":"2026-08-18T16:00:00+08:00"}'
 ```
 
 ## 本地开发方式
@@ -280,7 +286,7 @@ npm run build
 
 | 端 | 文件 |
 | --- | --- |
-| 后端 | `backend/internal/constants/enums.go`（定义）、`backend/internal/model/reservation.go`、`backend/internal/dto/reservation_dto.go`（oneof 校验）、`backend/internal/service/reservation_service.go`（状态机 Confirm/Cancel/CheckIn）、`backend/internal/util/formatters.go`（StatusText）、`backend/internal/constants/error_codes.go`（CodeReservation）、`backend/internal/constants/log_templates.go`（reservation_* 模板）、`backend/internal/repository/reservation_repository.go`（CountConflict 状态集合） |
+| 后端 | `backend/internal/constants/enums.go`（定义 + RescheduleLeadHours）、`backend/internal/model/reservation.go`、`backend/internal/dto/reservation_dto.go`（oneof 校验）、`backend/internal/service/reservation_service.go`（状态机 Confirm/Cancel/Reschedule/CheckIn）、`backend/internal/util/formatters.go`（StatusText）、`backend/internal/constants/error_codes.go`（CodeReservation）、`backend/internal/constants/log_templates.go`（reservation_* 模板）、`backend/internal/repository/reservation_repository.go`（CountConflict/CountActiveByStationTx 状态集合） |
 | 前端 | `frontend/src/constants/index.ts`（RESERVATION_STATUS/TEXT/TYPE）、`frontend/src/components/StatusBadge.vue`、`frontend/src/pages/Reservations.vue`（筛选与操作按钮显隐） |
 
 ### 赛事状态（draft / open / ready / finished）

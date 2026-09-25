@@ -16,11 +16,28 @@
         <template #value>
           <StatusBadge kind="reservation" :status="r.status" />
           <van-button v-if="isStaffOrAdmin && r.status === 'confirmed'" size="mini" type="primary" class="op-btn" @click="checkIn(r)">开机</van-button>
+          <van-button v-if="canReschedule(r)" size="mini" type="warning" plain class="op-btn" @click="openReschedule(r)">改约</van-button>
           <van-button v-if="['pending','confirmed'].includes(r.status)" size="mini" type="danger" plain class="op-btn" @click="cancel(r)">取消</van-button>
         </template>
       </van-cell>
     </van-cell-group>
     <van-pagination v-model="page" :total-items="total" :items-per-page="pageSize" @change="load" />
+
+    <van-popup v-model:show="showReschedule" position="bottom" round>
+      <van-cell-group inset :title="`改约 #${rescheduleTarget?.id ?? ''}`">
+        <van-cell v-if="rescheduleTarget" title="当前机位/时段" :label="`机位 ${rescheduleTarget.station_id} · ${formatTime(rescheduleTarget.start_time)} ~ ${formatTime(rescheduleTarget.end_time)}`" />
+        <van-field v-model="rescheduleForm.station_id" type="number" label="新机位ID" placeholder="输入新机位ID" />
+        <van-field :model-value="rescheduleForm.start_time" label="新开始时间" placeholder="选择开始日期" readonly @click="showRsStart = true" />
+        <van-field :model-value="rescheduleForm.end_time" label="新结束时间" placeholder="选择结束日期" readonly @click="showRsEnd = true" />
+      </van-cell-group>
+      <div class="submit-btn"><van-button round block type="primary" @click="submitReschedule">确认改约</van-button></div>
+    </van-popup>
+    <van-popup v-model:show="showRsStart" position="bottom">
+      <van-date-picker v-model="rsStartDate" title="选择开始日期" @confirm="onRsStartDate" @cancel="showRsStart = false" />
+    </van-popup>
+    <van-popup v-model:show="showRsEnd" position="bottom">
+      <van-date-picker v-model="rsEndDate" title="选择结束日期" @confirm="onRsEndDate" @cancel="showRsEnd = false" />
+    </van-popup>
 
     <van-popup v-model:show="showStart" position="bottom">
       <van-date-picker v-model="startDate" title="选择开始日期" @confirm="onStartDate" @cancel="showStart = false" />
@@ -35,11 +52,11 @@
 import { onMounted, ref } from 'vue'
 import { showSuccessToast, showToast } from 'vant'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { listReservations, createReservation, cancelReservation, checkInReservation, type Reservation } from '@/api/reservation'
+import { listReservations, createReservation, cancelReservation, checkInReservation, rescheduleReservation, type Reservation } from '@/api/reservation'
 import { formatTime } from '@/utils/format'
 import { useAuth } from '@/hooks/useAuth'
 
-const { isStaffOrAdmin } = useAuth()
+const { isStaffOrAdmin, user } = useAuth()
 const list = ref<Reservation[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -58,6 +75,13 @@ const showStart = ref(false)
 const showEnd = ref(false)
 const startDate = ref<Date[]>([])
 const endDate = ref<Date[]>([])
+const showReschedule = ref(false)
+const rescheduleTarget = ref<Reservation | null>(null)
+const rescheduleForm = ref({ station_id: '', start_time: '', end_time: '' })
+const showRsStart = ref(false)
+const showRsEnd = ref(false)
+const rsStartDate = ref<Date[]>([])
+const rsEndDate = ref<Date[]>([])
 
 async function load() {
   const data = await listReservations({ page: page.value, page_size: pageSize, status: status.value || undefined })
@@ -90,6 +114,55 @@ async function create() {
 async function cancel(r: Reservation) {
   await cancelReservation(r.id)
   showSuccessToast('已取消')
+  load()
+}
+
+// 本人待确认/已确认且距开始超过 2 小时的预约可改约（店员/管理员不受本人限制）。
+function canReschedule(r: Reservation) {
+  if (!['pending', 'confirmed'].includes(r.status)) return false
+  if (!isStaffOrAdmin.value && r.user_id !== user.value?.id) return false
+  return new Date(r.start_time).getTime() - Date.now() > 2 * 3600 * 1000
+}
+
+function openReschedule(r: Reservation) {
+  rescheduleTarget.value = r
+  rescheduleForm.value = { station_id: String(r.station_id), start_time: '', end_time: '' }
+  showReschedule.value = true
+}
+
+function onRsStartDate({ selectedValues }: any) {
+  rescheduleForm.value.start_time = `${selectedValues.join('-')} 10:00:00`
+  showRsStart.value = false
+}
+
+function onRsEndDate({ selectedValues }: any) {
+  rescheduleForm.value.end_time = `${selectedValues.join('-')} 12:00:00`
+  showRsEnd.value = false
+}
+
+// 后端按 RFC3339 解析时间，本地时间补上时区偏移。
+function toRFC3339(local: string): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const offset = -new Date().getTimezoneOffset()
+  const sign = offset >= 0 ? '+' : '-'
+  return `${local.replace(' ', 'T')}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
+}
+
+async function submitReschedule() {
+  const target = rescheduleTarget.value
+  if (!target) return
+  const stationId = Number(rescheduleForm.value.station_id)
+  if (!stationId || !rescheduleForm.value.start_time || !rescheduleForm.value.end_time) {
+    showToast('请填写新机位ID与起止时间')
+    return
+  }
+  await rescheduleReservation(target.id, {
+    station_id: stationId,
+    start_time: toRFC3339(rescheduleForm.value.start_time),
+    end_time: toRFC3339(rescheduleForm.value.end_time),
+  })
+  showSuccessToast('改约成功')
+  showReschedule.value = false
   load()
 }
 

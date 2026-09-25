@@ -69,3 +69,25 @@ func (r *ReservationRepository) CountConflict(stationID uint, start, end time.Ti
 	err := query.Count(&cnt).Error
 	return cnt, err
 }
+
+// CountConflictTx 事务内统计机位在时段内的冲突预约数（改约时配合机位行锁复检，防止并发抢占）。
+func (r *ReservationRepository) CountConflictTx(tx *gorm.DB, stationID uint, start, end time.Time, excludeID uint) (int64, error) {
+	var cnt int64
+	query := tx.Model(&model.Reservation{}).
+		Where("station_id = ? AND status IN ?", stationID, []string{"pending", "confirmed", "checked_in"}).
+		Where("start_time < ? AND end_time > ?", end, start)
+	if excludeID > 0 {
+		query = query.Where("id <> ?", excludeID)
+	}
+	err := query.Count(&cnt).Error
+	return cnt, err
+}
+
+// CountActiveByStationTx 事务内统计机位当前全部有效预约数（改约/取消后判断机位是否恢复空闲）。
+func (r *ReservationRepository) CountActiveByStationTx(tx *gorm.DB, stationID uint) (int64, error) {
+	var cnt int64
+	err := tx.Model(&model.Reservation{}).
+		Where("station_id = ? AND status IN ?", stationID, []string{"pending", "confirmed", "checked_in"}).
+		Count(&cnt).Error
+	return cnt, err
+}

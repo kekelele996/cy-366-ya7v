@@ -74,6 +74,30 @@ func (h *ReservationHandler) Cancel(c *gin.Context) {
 	response.OKMessage(c, constants.MsgUpdateSuccess, res)
 }
 
+// Reschedule 改约：更换机位与时段。
+func (h *ReservationHandler) Reschedule(c *gin.Context) {
+	var idReq dto.IDReq
+	if err := c.ShouldBindUri(&idReq); err != nil {
+		response.Fail(c, 400, constants.CodeValidation, "预约 ID 无效")
+		return
+	}
+	var req dto.RescheduleReservationReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, constants.CodeValidation, "改约参数校验失败："+err.Error())
+		return
+	}
+	userID, _ := c.Get("user_id")
+	uid, _ := userID.(uint)
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
+	res, err := h.reservationService.Reschedule(idReq.ID, uid, roleStr, &req)
+	if err != nil {
+		h.abort(c, err)
+		return
+	}
+	response.OKMessage(c, constants.MsgRescheduleOK, res)
+}
+
 // CheckIn 到店开机。
 func (h *ReservationHandler) CheckIn(c *gin.Context) {
 	var idReq dto.IDReq

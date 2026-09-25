@@ -32,6 +32,9 @@ const (
 // AllReservationStatus 所有预约状态。
 var AllReservationStatus = []string{ReservationPending, ReservationConfirmed, ReservationCheckedIn, ReservationCompleted, ReservationCancelled}
 
+// RescheduleLeadHours 改约需提前的小时数：开始前 2 小时内不可改约。
+const RescheduleLeadHours = 2
+
 // IsValidReservationStatus 判断预约状态是否合法。
 func IsValidReservationStatus(s string) bool {
 	switch s {

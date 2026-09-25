@@ -26,6 +26,10 @@ export function cancelReservation(id: number) {
   return post<Reservation>(`/reservations/${id}/cancel`)
 }
 
+export function rescheduleReservation(id: number, data: { station_id: number; start_time: string; end_time: string }) {
+  return post<Reservation>(`/reservations/${id}/reschedule`, data)
+}
+
 export function checkInReservation(id: number) {
   return post<Reservation>(`/reservations/${id}/checkin`)
 }
